@@ -1,0 +1,3 @@
+# ignore folder for mypy
+.mypy_cache/
+__pycache__/
