@@ -76,6 +76,62 @@ def main():
 
     # path = find_path(config)
     # print(path)
+
+    m_map.find_drones_paths()
+
+    t_ = 1
+    not_the_end = True
+    while not_the_end:
+        not_the_end = False
+        print_space = False
+        for d_ in range(0, m_map.nb_drones):
+            p_ = m_map.drones_path[d_]
+            if len(p_) < t_ + 1:
+                continue
+            s_ = p_[t_]
+            not_the_end = True
+            if s_ == p_[t_-1]:
+                continue
+            if print_space:
+                print(" ", end="")
+            print_space = True
+            if type(s_) is tuple:
+                t1, t2 = s_
+                print(f"D{d_+1}-{t1.name}-{t2.name}", end="")
+            else:
+                print(f"D{d_+1}-{s_.name}", end="")
+        if not_the_end:
+            print()
+            t_ += 1
+
+    print(f"{m_map.nb_drones} drones arrived in {t_-1} turns.")
+
+    # for d_ in range(1, m_map.nb_drones + 1):
+    #     print(f"----D{d_}")
+    #     path_ = m_map.find_path_for_one_drone(d_)
+    #     m_map.drones_path.append(path_)
+    #     if len(path_) < 1:
+    #         print("Can`t find path from start to finish")
+    #     else:
+    #     # for i_ in path_.keys():
+    #     #     print(path_[i_].name, "->", i_.name)
+    #         j = 0
+    #         print(f"---- Path D{d_}:")
+    #         for i_ in path_:
+    #             if type(i_) is tuple:
+    #                 t1, t2 = i_
+    #                 print(j, f"{t1.name}-{t2.name}")
+    #             else:
+    #                 print(j, i_.name)
+    #             j += 1
+    # for l_ in m_map.links:
+    #     if len(l_.occupied) > 0:
+    #         print(f"L:{l_.hubs[0].name}-{l_.hubs[1].name} :", l_.occupied)
+
+    # for h_ in m_map.hubs.values():
+    #     if len(h_.occupied) > 0:
+    #         print(f"H:{h_.name}:", h_.occupied)
+
     draw_map(m_map)
 
 

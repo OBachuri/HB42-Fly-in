@@ -1,0 +1,25 @@
+# my test map
+
+nb_drones: 5
+
+start_hub: start 2 2 [color=violet]
+end_hub: goal 9 2 [color=green]
+hub: L1 3 2 [zone=normal color=blue]
+hub: R1 4 3 [zone=restricted color=red]
+hub: R2 6 3 [color=blue]
+hub: L2 4 1 [zone=normal color=blue]
+hub: L3 5 1 [zone=normal color=blue]
+hub: L4 6 1 [zone=normal color=blue]
+hub: L5 7 1 [zone=normal color=blue]
+hub: H1 8 2 [zone=normal color=blue max_drones=2]
+
+connection: start-L1
+connection: R1-L1
+connection: L2-L1
+connection: R1-R2 [max_link_capacity=2]
+connection: R2-H1
+connection: H1-goal
+connection: L2-L3
+connection: L3-L4
+connection: L4-L5
+connection: L5-H1

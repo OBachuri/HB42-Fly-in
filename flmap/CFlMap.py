@@ -2,7 +2,9 @@ import sys
 import re
 from typing import Any
 from enum import Enum
+import heapq
 from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import ConfigDict
 
 
 # Use an Enum for zone types to manage related constants effectively
@@ -21,6 +23,9 @@ class ELocation(Enum):
 
 class CArea(BaseModel):
     """ Area / Zone / Hub / Point - vertex of graph """
+
+    model_config = ConfigDict(frozen=True)
+
     name: str = Field(min_length=1)
     x: int
     y: int
@@ -28,6 +33,16 @@ class CArea(BaseModel):
     zone: EZoneStatus = EZoneStatus.NORMAL
     color: str = ""
     max_drones: int = Field(ge=1, default=1)    # Max quantity of drons
+    occupied: dict[int, int] = {}  # how many drons ocupated on every step
+    links: list[tuple['CLink', 'CArea', int]] = []  # (Clink, where, max_drons)
+
+    def __hash__(self) -> int:
+        return hash(self.name)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, CArea):
+            return False
+        return self.name == other.name
 
     @field_validator("zone", mode="before")
     @classmethod
@@ -62,19 +77,25 @@ class CArea(BaseModel):
 
 
 class CLink(BaseModel):
-    """ Link betweeen two hubs """
-    hubs: list[CArea]   # there must be two areas
+    """ Edge / link - connection betweeen two Vertices (hubs) """
+
+    model_config = ConfigDict(frozen=True)
+
+    hubs: list[CArea]   # there must be two areas (hubs)
     max_link_capacity: int = Field(ge=1, default=1)
+    # how many drons ocupated on every step (time, quantity)
+    occupied: dict[int, int] = {}
 
 
 class CFlMap(BaseModel):
-    """ Map """
+    """ Map (Graph) """
     name: str = Field(min_length=1)
     nb_drones: int = 0
     start_hub: CArea | None = None   # start point
     end_hub: CArea | None = None     # finish point
     hubs: dict[str, CArea] = {}
     links: list[CLink] = []
+    drones_path: list[list[CArea | tuple[CArea, CArea]]] = []
     x_min: int | None = None
     x_max: int | None = None
     y_min: int | None = None
@@ -123,8 +144,14 @@ class CFlMap(BaseModel):
         # print("---link---", hub_name_1, hub_name_2)
         # print("1:", hub_1)
         # print("2:", hub_2)
-        self.links.append(CLink(hubs=[hub_1, hub_2],
-                                max_link_capacity=max_link_capacity))
+        if len([l_ for l_ in self.links if (hub_1 in l_.hubs)
+                and (hub_2 in l_.hubs)]) > 0:
+            raise ValueError(f"Error: Link between '{hub_name_1}'"
+                             f" and '{hub_name_2}' already exists !")
+        link_ = CLink(hubs=[hub_1, hub_2], max_link_capacity=max_link_capacity)
+        self.links.append(link_)
+        hub_1.links.append((link_, hub_2, max_link_capacity))
+        hub_2.links.append((link_, hub_1, max_link_capacity))
 
     def read_file(self, path_to_file: str):
 
@@ -239,3 +266,116 @@ class CFlMap(BaseModel):
             raise ValueError("Start hub (start_hub) not found!")
         if self.end_hub is None:
             raise ValueError("Finish hub (end_hub) not found!")
+
+    def find_path_for_one_drone(self, drone_number: int):
+        # -> list[tuple[CLink | None, CArea | None]]:
+
+        def reconstruct_path(came_from, current, g_score):
+            path = [current]           # goal
+            time_ = g_score[current]   # arrival time
+            while current in came_from:
+                from_ = came_from[current]
+                time_c = g_score[from_]
+                current.occupied[time_] = current.occupied.get(time_, 0) + 1
+
+                link_ = [l_ for l_ in self.links if (from_ in l_.hubs)
+                         and (current in l_.hubs)][0]
+                if current.zone == EZoneStatus.RESTRICTED:
+                    link_.occupied[time_ - 1] = link_.occupied.get(time_ - 1,
+                                                                   0) + 1
+                    time_step = 2
+                else:
+                    time_step = 1
+                link_.occupied[time_] = link_.occupied.get(time_, 0) + 1
+                if current.zone == EZoneStatus.RESTRICTED:
+                    path.append((from_, current))
+                while time_ > (time_c + time_step):
+                    from_.occupied[time_ - time_step] = from_.occupied.get(
+                        time_ - time_step, 0) + 1
+                    path.append(from_)
+                    time_ -= 1
+                current = from_
+                time_ = time_c
+                path.append(current)
+
+                # print("=", current.name, "time:", g_score[current])
+            path.reverse()
+            return path
+
+        g_score = {self.start_hub: 0}
+
+        open_heap = []   # : list[tuple[int, CArea]] = []
+        heapq.heappush(open_heap, (0, 0, 0, self.start_hub))
+        came_from = {}
+        closed = set()
+
+        counter = 0  # prevents tie comparison issues
+
+        while open_heap:
+            step_, cost_, _, current = heapq.heappop(open_heap)
+
+            if current == self.end_hub:
+                return reconstruct_path(came_from, current, g_score)
+
+            if current in closed:
+                continue
+            closed.add(current)
+
+            score_ = g_score[current]
+
+            for l_ in current.links:
+                link, hub, max_dron_link = l_
+
+                if hub in closed:
+                    continue
+                if hub.zone == EZoneStatus.BLOCKED:
+                    closed.add(hub)
+                    continue
+
+                cost_hub = hub.zone.value
+                time_ = 1
+                if (hub.zone == EZoneStatus.RESTRICTED):
+                    time_ = 2
+                tentative_g = score_ + time_
+
+                if (hub not in g_score) or g_score[hub] > tentative_g:
+                    # check link
+                    link_ = [l_ for l_ in self.links if (hub in l_.hubs)
+                             and (current in l_.hubs)][0]
+                    if link_.max_link_capacity < 1:
+                        continue
+                    t_ = 0
+                    if (hub.zone == EZoneStatus.RESTRICTED):
+                        while ((link_.max_link_capacity <=
+                                link_.occupied.get(tentative_g + t_, 0))
+                                or (link_.max_link_capacity <=
+                                    link_.occupied.get(
+                                        tentative_g + t_ - 1, 0))
+                                or
+                                (hub.max_drones <=
+                                 hub.occupied.get(tentative_g + t_, 0))):
+                            t_ += 1
+                    else:
+                        while ((link_.max_link_capacity <=
+                                link_.occupied.get(tentative_g + t_, 0))
+                                or
+                                (hub.max_drones <=
+                                 hub.occupied.get(tentative_g + t_, 0))):
+                            t_ += 1
+                    g_score[hub] = tentative_g + t_
+                    came_from[hub] = current
+                    counter += 1
+                    # print("cur:", current.name, "---------hub:", hub.name,
+                    # "time:", tentative_g + t_,
+                    # "cost:", cost_hub, "count:", counter)
+                    heapq.heappush(open_heap, (tentative_g + t_,
+                                               cost_hub, counter, hub))
+        return []
+
+    def find_drones_paths(self) -> None:
+        for d_ in range(1, self.nb_drones + 1):
+            path_ = self.find_path_for_one_drone(d_)
+            self.drones_path.append(path_)
+            if len(path_) < 1:
+                print("Can`t find path from start to finish")
+                return
