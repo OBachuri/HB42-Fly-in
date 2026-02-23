@@ -1,6 +1,6 @@
 import sys
 import re
-from typing import Any
+from typing import Any, cast
 from enum import Enum
 import heapq
 from pydantic import BaseModel, Field, model_validator, field_validator
@@ -39,7 +39,7 @@ class CArea(BaseModel):
     def __hash__(self) -> int:
         return hash(self.name)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, CArea):
             return False
         return self.name == other.name
@@ -101,7 +101,7 @@ class CFlMap(BaseModel):
     y_min: int | None = None
     y_max: int | None = None
 
-    def add_hub(self, name: str, x: int, y: int, **params) -> None:
+    def add_hub(self, name: str, x: int, y: int, **params: Any) -> None:
         if len(name.strip()) < 1:
             raise ValueError(f"Error: Hub name must be set ('{name}')!")
         if not (self.hubs.get(name, None) is None):
@@ -153,7 +153,7 @@ class CFlMap(BaseModel):
         hub_1.links.append((link_, hub_2, max_link_capacity))
         hub_2.links.append((link_, hub_1, max_link_capacity))
 
-    def read_file(self, path_to_file: str):
+    def read_file(self, path_to_file: str) -> None:
 
         # Matches lines like:
         # hub: roof1 3 4 [zone=restricted color=red]
@@ -267,11 +267,18 @@ class CFlMap(BaseModel):
         if self.end_hub is None:
             raise ValueError("Finish hub (end_hub) not found!")
 
-    def find_path_for_one_drone(self, drone_number: int):
+    def find_path_for_one_drone(self,
+                                drone_number: int) -> list[CArea |
+                                                           tuple[CArea,
+                                                                 CArea]]:
         # -> list[tuple[CLink | None, CArea | None]]:
+        drone_number
 
-        def reconstruct_path(came_from, current, g_score):
-            path = [current]           # goal
+        def reconstruct_path(came_from: dict[CArea, CArea],
+                             current: CArea,
+                             g_score: dict[CArea, int]
+                             ) -> list[CArea | tuple[CArea, CArea]]:
+            path: list[CArea | tuple[CArea, CArea]] = [current]  # goal
             time_ = g_score[current]   # arrival time
             while current in came_from:
                 from_ = came_from[current]
@@ -302,11 +309,15 @@ class CFlMap(BaseModel):
             path.reverse()
             return path
 
-        g_score = {self.start_hub: 0}
+        g_score: dict[CArea, int] = {cast(CArea, self.start_hub): 0}
 
-        open_heap = []   # : list[tuple[int, CArea]] = []
-        heapq.heappush(open_heap, (0, 0, 0, self.start_hub))
-        came_from = {}
+        # open_heap : list[tuple[int, int, int, CArea]]
+        # (time, cost/prioritet, counter, zone)
+        open_heap: list[tuple[int, int, int, CArea]] = []
+        heapq.heappush(open_heap,
+                       cast(tuple[int, int, int, CArea],
+                            (0, 0, 0, self.start_hub)))
+        came_from: dict[CArea, CArea] = {}
         closed = set()
 
         counter = 0  # prevents tie comparison issues
@@ -352,15 +363,18 @@ class CFlMap(BaseModel):
                                     link_.occupied.get(
                                         tentative_g + t_ - 1, 0))
                                 or
-                                (hub.max_drones <=
-                                 hub.occupied.get(tentative_g + t_, 0))):
+                                ((hub.max_drones <=
+                                  hub.occupied.get(tentative_g + t_, 0))
+                                 and (hub != self.end_hub))
+                               ):
                             t_ += 1
                     else:
                         while ((link_.max_link_capacity <=
                                 link_.occupied.get(tentative_g + t_, 0))
                                 or
-                                (hub.max_drones <=
-                                 hub.occupied.get(tentative_g + t_, 0))):
+                                ((hub.max_drones <=
+                                 hub.occupied.get(tentative_g + t_, 0))
+                                 and (hub != self.end_hub))):
                             t_ += 1
                     g_score[hub] = tentative_g + t_
                     came_from[hub] = current
