@@ -3,7 +3,7 @@ import sys
 from typing import cast, Any
 
 from matplotlib import pyplot as plt
-# from matplotlib.patches import Circle
+from matplotlib.patches import Circle as pltCircle
 # from matplotlib.collections import PatchCollection
 from matplotlib.colors import is_color_like, to_rgba
 from matplotlib.animation import FuncAnimation
@@ -14,10 +14,17 @@ from flmap import CFlMap, EZoneStatus, CArea  # CLink, CArea, ELocation
 
 def draw_map(map: CFlMap, max_turs: int) -> None:
     """ Draw map and animate drones fly """
-    fig, ax = plt.subplots(figsize=(cast(int, map.x_max) -
-                                    cast(int, map.x_min) + 2,
-                                    cast(int, map.y_max) -
-                                    cast(int, map.y_min) + 2))
+
+    rainbow_color = ['#F60000',
+                     '#FF8C00',
+                     '#FFEE00',
+                     '#4DE94C',
+                     '#3783FF',
+                     '#4815AA']
+
+    x = max(abs(cast(int, map.x_max) - cast(int, map.x_min)) + 2, 10)
+    y = max(abs(cast(int, map.y_max) - cast(int, map.y_min)) + 2, 5)
+    fig, ax = plt.subplots(figsize=(x, y))
 
     ax.set_xlim((cast(float, map.x_min) - 2, cast(float, map.x_max) + 2))
     ax.set_ylim((cast(float, map.y_min) - 2, cast(float, map.y_max) + 2))
@@ -43,7 +50,7 @@ def draw_map(map: CFlMap, max_turs: int) -> None:
             r = 0.3 + (dr - 1) / 20
         if area.color:
             color_ = area.color
-            if not is_color_like(color_):
+            if (not is_color_like(color_) and (color_.lower() != "rainbow")):
                 color_ = '#d4c3d6'
         else:
             color_ = '#e375f0'
@@ -59,12 +66,37 @@ def draw_map(map: CFlMap, max_turs: int) -> None:
         elif area.zone == EZoneStatus.PRIORITY:
             edgecolor_ = "green"
             linewidth_ = 5
-        fill_rgba = (*to_rgba(color_)[:3], 0.4)
         edge_rgba: None | str | tuple[float, float, float, float] = edgecolor_
         if edgecolor_:
             edge_rgba = (*to_rgba(edgecolor_)[:3], 0.9)
-        circle = plt.Circle((area.x, area.y), r, facecolor=fill_rgba,
-                            edgecolor=edge_rgba, linewidth=linewidth_)
+        if color_.lower() == "rainbow":
+            # convert data radius to display (pixel) units
+            trans = ax.transData.transform
+            x0, _ = trans((0, 0))
+            x1, _ = trans((r, 0))
+            linewidth = (abs(x1 - x0) / len(rainbow_color)) * 0.7
+            for ri in range(0, len(rainbow_color)):
+                color_rgba = (*to_rgba(rainbow_color[ri])[:3], 0.4)
+                if ri == 0:
+                    circle = pltCircle((area.x, area.y), r/len(rainbow_color),
+                                       facecolor=color_rgba,
+                                       edgecolor=color_rgba, linewidth=0)
+                    ax.add_patch(circle)
+                else:
+                    circle = pltCircle((area.x, area.y),
+                                       (ri+1-0.5)*r/len(rainbow_color),
+                                       fill=False, edgecolor=color_rgba,
+                                       linewidth=linewidth)
+                    ax.add_patch(circle)
+                if not (linewidth_ is None):
+                    circle = pltCircle((area.x, area.y), r, fill=False,
+                                       edgecolor=edge_rgba,
+                                       linewidth=linewidth_)
+                    ax.add_patch(circle)
+        else:
+            fill_rgba = (*to_rgba(color_)[:3], 0.4)
+            circle = pltCircle((area.x, area.y), r, facecolor=fill_rgba,
+                               edgecolor=edge_rgba, linewidth=linewidth_)
         ax.add_patch(circle)
         ax.text(area.x, area.y, area.name, ha='center', va='center',
                 color='black', fontsize=10, rotation=45,
@@ -74,7 +106,7 @@ def draw_map(map: CFlMap, max_turs: int) -> None:
                 [link.hubs[0].y, link.hubs[1].y],
                 color='black', lw=(link.max_link_capacity * 2), alpha=0.3)
 
-    print("-"*40)
+    # print("-"*40)
     dots = []
     labels = []
     for i_ in range(0, map.nb_drones):
@@ -85,10 +117,18 @@ def draw_map(map: CFlMap, max_turs: int) -> None:
                         ha='center', va='top')
         labels.append(label)
 
-    step_text = ax.text(0.02, 0.95, "Step: 0",
-                        transform=ax.transAxes,
-                        fontsize=10
-                        )
+    if max_turs > 0:
+        step_text = ax.text(0.02, 0.95, "Step: 0",
+                            transform=ax.transAxes,
+                            fontsize=10
+                            )
+    else:
+        step_text = ax.text(0.02, 0.95,
+                            "Can't find path from start to finish!",
+                            transform=ax.transAxes,
+                            fontsize=10,
+                            color='red'
+                            )
 
     frame = 0
     paused = False
@@ -135,8 +175,20 @@ def draw_map(map: CFlMap, max_turs: int) -> None:
                 l_ = list(lab_[k_])
                 l_.sort()
                 s_ = f"D{l_[0]+1}"
+                lio_ = l_[0]
                 for i_ in range(1, len(l_)):
-                    s_ = s_+f",{l_[i_] + 1}"
+                    is_sequence = ((lio_ + 1) == l_[i_]
+                                   and len(l_) > (i_ + 1)
+                                   and (l_[i_] + 1) == l_[i_ + 1])
+                    if (s_[-1] == '-'):
+                        if not is_sequence:
+                            s_ = s_+f"{l_[i_] + 1}"
+                    else:
+                        if is_sequence:
+                            s_ = s_ + '-'
+                        else:
+                            s_ = s_+f",{l_[i_] + 1}"
+                    lio_ = l_[i_]
                     labels[l_[i_]].set_text("")
                 labels[l_[0]].set_text(s_)
                 # print(lab_[k_], "s:", s_)
@@ -183,12 +235,11 @@ def draw_map(map: CFlMap, max_turs: int) -> None:
             direction = -1
             paused = False
 
-    ani = FuncAnimation(fig, update, interval=40,
-                        save_count=max_turs, blit=True)
-
-    ani
-
-    fig.canvas.mpl_connect('key_press_event', on_key)
+    if max_turs > 0:
+        ani = FuncAnimation(fig, update, interval=40,
+                            save_count=max_turs, blit=True)
+        ani
+        fig.canvas.mpl_connect('key_press_event', on_key)
 
     plt.show()
 
@@ -199,8 +250,16 @@ def main() -> None:
         sys.exit(1)
 
     file_name = sys.argv[1]
-    m_map = CFlMap(name=file_name)
-    m_map.read_file(file_name)
+
+    if len(file_name) < 1:
+        print("Usage: python3 ", sys.argv[0], " <config_file>")
+        sys.exit(1)
+    try:
+        m_map = CFlMap(name=file_name)
+        m_map.read_file(file_name)
+    except Exception as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
 
     print("-"*20)
     # print("hubs:", m_map.hubs)
@@ -211,6 +270,13 @@ def main() -> None:
     # print(path)
 
     m_map.find_drones_paths()
+
+    if len(m_map.drones_path) <= 0:
+        return
+
+    if len(m_map.drones_path[0]) <= 0:
+        draw_map(m_map, 0)
+        return
 
     t_ = 1
     not_the_end = True

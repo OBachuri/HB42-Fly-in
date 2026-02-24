@@ -391,5 +391,5 @@ class CFlMap(BaseModel):
             path_ = self.find_path_for_one_drone(d_)
             self.drones_path.append(path_)
             if len(path_) < 1:
-                print("Can`t find path from start to finish")
+                print("Can't find path from start to finish!")
                 return
