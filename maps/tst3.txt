@@ -1,0 +1,57 @@
+# Trap map for prioritized planner
+nb_drones: 6
+
+start_hub: start 0 0 [max_drones=6 color=violet]
+end_hub: goal 12 0 [max_drones=6 color=green]
+
+# Short paths with bottlenecks
+hub: A1 2 0 [max_drones=1]
+hub: B1 4 0 [max_drones=1]
+hub: T1 6 0 [max_drones=1]
+
+hub: A2 2 2 [max_drones=1 zone=priority color=blue]
+hub: B2 4 2 [max_drones=1]
+hub: T2 6 2 [max_drones=1]
+
+hub: A3 2 -2 [max_drones=1]
+hub: B3 4 -2 [max_drones=1]
+hub: T3 6 -2 [max_drones=1]
+
+# Long alternative paths (slightly slower)
+hub: X1 3 4 [max_drones=2]
+hub: Y1 6 4 [max_drones=2]
+
+hub: X2 3 -4 [max_drones=2]
+hub: Y2 6 -4 [max_drones=2]
+
+# Merge hub
+hub: M 9 0 [max_drones=3]
+
+# Connections for short paths
+connection: start-A1 [max_link_capacity=2]
+connection: A1-B1 [max_link_capacity=1]
+connection: B1-T1 [max_link_capacity=1]
+connection: T1-M [max_link_capacity=1]
+
+connection: start-A2 [max_link_capacity=2]
+connection: A2-B2 [max_link_capacity=1]
+connection: B2-T2 [max_link_capacity=1]
+connection: B2-M [max_link_capacity=2]
+connection: T2-M [max_link_capacity=1]
+
+connection: start-A3 [max_link_capacity=2]
+connection: A3-B3 [max_link_capacity=1]
+connection: B3-T3 [max_link_capacity=1]
+connection: T3-M [max_link_capacity=1]
+
+# Connections for long paths
+connection: start-X1 [max_link_capacity=2]
+connection: X1-Y1 [max_link_capacity=2]
+connection: Y1-M [max_link_capacity=2]
+
+connection: start-X2 [max_link_capacity=2]
+connection: X2-Y2 [max_link_capacity=2]
+connection: Y2-M [max_link_capacity=2]
+
+# Goal
+connection: M-goal [max_link_capacity=3]

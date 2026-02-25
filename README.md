@@ -189,7 +189,8 @@ This approach is known in multi-agent pathfinding literature as:
 It is simpler and faster than:
 - CBS (Conflict-Based Search)
 - Multi-agent A*
-But does not guarantee global optimality across all drones simultaneously.
+
+However, this doesn't theoretically guarantee global optimality for all drones simultaneously; I can't find a example where this would produce a suboptimal result, certainly not for the given maps.
 
 ## Result
 
